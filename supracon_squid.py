@@ -1,8 +1,10 @@
 # coding: utf-8
 from enum import IntEnum
-from typing import Final
+from typing import Final, List, Optional, Union
 
 from serial import Serial
+
+__all__ = ['SupraConSQUID', 'SupraConSQUIDScanner']
 
 
 def _map(x: float, minimum: float, maximum: float) -> bytes:
@@ -74,6 +76,11 @@ class SupraConSQUID(Serial):
     def __init__(self, channel: int, **kwargs) -> None:
         super().__init__(**kwargs)
         self.channel: int = channel
+
+        self.baudrate = 57600
+        self.bytesize = 8
+        self.parity = 'N'
+        self.stopbits = 1
 
         self.open()
 
@@ -175,5 +182,34 @@ class SupraConSQUID(Serial):
         super().close()
 
 
+def SupraConSQUIDScanner(vid: Optional[int] = None, pid: Optional[int] = None) -> List[str]:
+    from serial.tools.list_ports import comports
+    from serial.tools.list_ports_common import ListPortInfo
+
+    good_ports: List[str] = []
+    s: Serial = Serial()
+    ports: List[ListPortInfo] = comports()
+    port: Union[ListPortInfo]
+    for port in ports:
+        if (vid is None or port.vid == vid) and (pid is None or port.pid == pid):
+            s.port = port.device
+            s.baudrate = 9600
+            s.parity = 'N'
+            s.bytesize = 8
+            s.timeout = .1
+            s.write_timeout = .1
+            s.open()
+            s.write(b'\xff\x00\x00\x00')
+            try:
+                s.read(4)
+            except TimeoutError:
+                continue
+            else:
+                good_ports.append(port.device)
+            finally:
+                s.close()
+    return good_ports
+
+
 if __name__ == '__main__':
-    print(hex(_command(_Actions.DAC_OUTPUT, _DACOutput.DC_FLUX)))
+    print(SupraConSQUIDScanner(vid=0x0403, pid=0x6001))
