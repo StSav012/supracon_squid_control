@@ -1,8 +1,8 @@
 # coding: utf-8
 from enum import IntEnum
-from typing import Final, List, Optional, Union
+from typing import Final, List, Optional, Tuple, Union
 
-from serial import Serial
+from serial import PortNotOpenError, Serial
 
 __all__ = ['SupraConSQUID', 'SupraConSQUIDScanner']
 
@@ -182,32 +182,35 @@ class SupraConSQUID(Serial):
         super().close()
 
 
-def SupraConSQUIDScanner(vid: Optional[int] = None, pid: Optional[int] = None) -> List[str]:
+def SupraConSQUIDScanner(vid: Optional[int] = None, pid: Optional[int] = None) -> List[Tuple[str, int]]:
     from serial.tools.list_ports import comports
     from serial.tools.list_ports_common import ListPortInfo
 
-    good_ports: List[str] = []
+    good_ports: List[Tuple[str, int]] = []
     s: Serial = Serial()
     ports: List[ListPortInfo] = comports()
     port: Union[ListPortInfo]
     for port in ports:
         if (vid is None or port.vid == vid) and (pid is None or port.pid == pid):
             s.port = port.device
-            s.baudrate = 9600
             s.parity = 'N'
             s.bytesize = 8
-            s.timeout = .1
-            s.write_timeout = .1
-            s.open()
-            s.write(b'\xff\x00\x00\x00')
-            try:
-                s.read(4)
-            except TimeoutError:
-                continue
-            else:
-                good_ports.append(port.device)
-            finally:
-                s.close()
+            s.stopbits = 1
+            s.timeout = .5
+            s.write_timeout = .5
+            for baud_rate in (57600, 9600, 38400, 19200):
+                s.baudrate = baud_rate
+                s.open()
+                s.write(b'\x00\x40\x00\xf0')
+                try:
+                    response: bytes = s.read(4)
+                except (PortNotOpenError, TimeoutError):
+                    continue
+                else:
+                    if response == b'\x00\x40\x00\xf0':
+                        good_ports.append((port.device, baud_rate))
+                finally:
+                    s.close()
     return good_ports
 
 
