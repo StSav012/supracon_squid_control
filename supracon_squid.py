@@ -274,9 +274,18 @@ class SupraConSQUIDChannel:
 class SupraConSQUID(Serial):
 
     def __init__(self, port: str, baud_rate: int) -> None:
+        self._channels: dict[int, SupraConSQUIDChannel] = dict()
         super(SupraConSQUID, self).__init__(port=port, baudrate=baud_rate,
                                             bytesize=8, parity='N', stopbits=1, timeout=1)
-        self.channels: list[SupraConSQUIDChannel] = []
+
+    def __getitem__(self, item: int) -> SupraConSQUIDChannel:
+        if not 0 <= item < len(self._channels):
+            raise IndexError(f'Channel {item} does not exist')
+        return self._channels[item]
+
+    @property
+    def channels(self) -> tuple[int]:
+        return tuple(self._channels.keys())
 
     def open(self) -> None:
         if self.is_open:
@@ -299,24 +308,24 @@ class SupraConSQUID(Serial):
         self.write(bytearray((0xff, 0x00, 0x00, 0x00)))
         print('open: zeros', self.read(4))
 
-        self.channels = []
+        self._channels.clear()
         channel: int
         for channel in range(0x01, 0x21):
             request: bytearray = bytearray((channel, 0x40, 0x00, 0xf0))
             self.write(request)
             response: bytes = self.read(4)
             if response[1] == 0xff:  # there is such a channel
-                self.channels.append(SupraConSQUIDChannel(self, channel, int.from_bytes(response[2:], 'big')))
+                self._channels[channel] = SupraConSQUIDChannel(self, channel, int.from_bytes(response[2:], 'big'))
             elif response != request:
                 raise ConnectionError(f'Invalid channel {channel} capabilities response: {response}')
 
     def close(self) -> None:
         if self.is_open:
+            self._channels.clear()
             self.write(bytearray((0xff, 0x08, 0x00, 0x00)))
             print('close: dc bias to minimum', self.read(4))
             self.write(bytearray((0xff, 0x00, 0x00, 0x00)))
             print('close: zeros', self.read(4))
-            self.channels.clear()
         super(SupraConSQUID, self).close()
 
     def write(self, data: bytes | bytearray) -> int:
