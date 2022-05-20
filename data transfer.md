@@ -263,8 +263,6 @@ The values are
   - `FF FF` for 2.5.
   - `33 33` per 1.
 
-The last response comes in 6.2&nbsp;seconds.
-
 ### Heat Time
 
 |              | Sent            |     Received    |
